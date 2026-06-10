@@ -61,7 +61,7 @@ A native SwiftUI system monitor for macOS, ported and expanded from the original
 - Serial number validity check
 - Partial SIP disable detection
 - Apple Silicon automatically caps confidence at 5 (genuine Apple hardware)
-- Verdict: **Genuine Mac** / **Suspicious** / **Likely Hackintosh** / **Hackintosh Detected**
+- Verdict: **Genuine Mac** / **Suspicious** / **Likely Hackintosh** / **Hackintosh Detected** (some legit macs could pass as hackintoshes if OCLP is used due to its hackintosh like nature)
 
 ### Info
 - OS name, version, build, kernel version, architecture
