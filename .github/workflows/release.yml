@@ -9,17 +9,13 @@ on:
       - main
       - master
 
-# Allow creating releases and uploading assets
 permissions:
   contents: write
 
 jobs:
   build-and-release:
-    # NOTE: glassEffect() requires the macOS 26 Xcode SDK.
-    # If the build fails with "cannot find 'glassEffect' in scope", your runner
-    # needs Xcode 26 installed. Use a self-hosted runner on macOS 26 Tahoe,
-    # or wait for GitHub to add macOS 26 hosted runners.
-    runs-on: self-hosted
+    runs-on: macos-15
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -51,52 +47,56 @@ jobs:
 
       - name: Compute next version tag
         id: version
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Get highest X from existing v0.X releases, then increment
-          HIGHEST=$(gh release list --limit 100 --json tagName \
-            --jq '.[].tagName' 2>/dev/null \
-            | grep -E '^v0\.[0-9]+$' \
-            | grep -oE '[0-9]+$' \
-            | sort -n \
-            | tail -1)
-
-          if [ -z "$HIGHEST" ]; then
-            NEXT_TAG="v0.1"
-          else
-            NEXT_TAG="v0.$((HIGHEST + 1))"
-          fi
-
+          HIGHEST=$(curl -s \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases?per_page=100" \
+            | python3 -c "
+import sys, json, re
+releases = json.load(sys.stdin)
+tags = [r['tag_name'] for r in releases if re.match(r'^v0\.[0-9]+$', r['tag_name'])]
+nums = [int(re.search(r'[0-9]+$', t).group()) for t in tags]
+print(max(nums) if nums else 0)
+")
+          NEXT_TAG="v0.$((HIGHEST + 1))"
           echo "tag=$NEXT_TAG" >> "$GITHUB_OUTPUT"
           echo "Next release tag: $NEXT_TAG"
 
-      - name: Write release notes
-        run: |
-          SHORT_SHA="${GITHUB_SHA::7}"
-          cat > /tmp/release_notes.md << NOTES
-          **Automated build** from \`${GITHUB_REF_NAME}\` @ \`${SHORT_SHA}\`
-
-          ### Install
-          1. Download **cpuY.zip** and unzip it
-          2. Move **cpuY.app** to \`/Applications\`
-          3. First launch: right-click → **Open** (bypasses Gatekeeper — app is ad-hoc signed, not notarized)
-
-          Alternatively remove the quarantine flag:
-          \`\`\`
-          xattr -dr com.apple.quarantine /Applications/cpuY.app
-          \`\`\`
-
-          ### Requirements
-          macOS 12 Monterey or later (Liquid Glass on macOS 26 Tahoe)
-          NOTES
-
-      - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create GitHub Release and upload asset
         run: |
           NEXT_TAG="${{ steps.version.outputs.tag }}"
-          gh release create "$NEXT_TAG" \
-            /tmp/cpuY.zip#cpuY.zip \
-            --title "cpuY $NEXT_TAG" \
-            --notes-file /tmp/release_notes.md
+          SHORT_SHA="${GITHUB_SHA::7}"
+
+          NOTES="**Automated build** from \`${GITHUB_REF_NAME}\` @ \`${SHORT_SHA}\`
+
+### Install
+1. Download **cpuY.zip** and unzip it
+2. Move **cpuY.app** to \`/Applications\`
+3. First launch: right-click → **Open** (bypasses Gatekeeper — app is ad-hoc signed, not notarized)
+
+Alternatively remove the quarantine flag:
+\`\`\`
+xattr -dr com.apple.quarantine /Applications/cpuY.app
+\`\`\`
+
+### Requirements
+macOS 12 Monterey or later (Liquid Glass on macOS 26 Tahoe)"
+
+          # Create the release
+          RELEASE=$(curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            "https://api.github.com/repos/${{ github.repository }}/releases" \
+            -d "$(python3 -c "import json,sys; print(json.dumps({'tag_name':'$NEXT_TAG','name':'cpuY $NEXT_TAG','body':sys.stdin.read()}))" <<< "$NOTES")")
+
+          echo "$RELEASE" | python3 -c "import sys,json; r=json.load(sys.stdin); print('Release URL:', r.get('html_url','(no url - check response)')); print('Upload URL:', r.get('upload_url','ERROR'))"
+
+          UPLOAD_URL=$(echo "$RELEASE" | python3 -c "import sys,json; print(json.load(sys.stdin)['upload_url'])" | sed 's/{?name,label}//')
+
+          # Upload the zip
+          curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/zip" \
+            "${UPLOAD_URL}?name=cpuY.zip&label=cpuY.zip" \
+            --data-binary @/tmp/cpuY.zip \
+            | python3 -c "import sys,json; r=json.load(sys.stdin); print('Asset:', r.get('browser_download_url','ERROR'))"
