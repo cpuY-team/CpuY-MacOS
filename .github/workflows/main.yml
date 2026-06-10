@@ -1,6 +1,7 @@
-name: Build & Release
+name: main
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - '**.swift'
