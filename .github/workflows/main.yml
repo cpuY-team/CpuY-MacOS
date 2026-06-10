@@ -36,6 +36,8 @@ jobs:
             -scheme cpuY \
             -configuration Release \
             -derivedDataPath /tmp/cpuY_build \
+            ONLY_ACTIVE_ARCH=NO \
+            ARCHS="x86_64 arm64" \
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=NO \
             build
