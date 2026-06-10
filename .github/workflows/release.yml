@@ -1,0 +1,103 @@
+name: Build & Release
+
+on:
+  push:
+    paths:
+      - '**.swift'
+      - 'cpuY.xcodeproj/**'
+    branches:
+      - main
+      - master
+
+# Allow creating releases and uploading assets
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    # NOTE: glassEffect() requires the macOS 26 Xcode SDK.
+    # If the build fails with "cannot find 'glassEffect' in scope", your runner
+    # needs Xcode 26 installed. Use a self-hosted runner on macOS 26 Tahoe,
+    # or wait for GitHub to add macOS 26 hosted runners.
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select latest available Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$XCODE" ]; then
+            sudo xcode-select -s "$XCODE/Contents/Developer"
+          fi
+          xcodebuild -version
+
+      - name: Build (Release)
+        run: |
+          xcodebuild \
+            -project cpuY.xcodeproj \
+            -scheme cpuY \
+            -configuration Release \
+            -derivedDataPath /tmp/cpuY_build \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
+      - name: Ad-hoc sign & zip
+        run: |
+          APP="/tmp/cpuY_build/Build/Products/Release/cpuY.app"
+          codesign --deep --force --sign - "$APP"
+          ditto -c -k --keepParent "$APP" /tmp/cpuY.zip
+
+      - name: Compute next version tag
+        id: version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get highest X from existing v0.X releases, then increment
+          HIGHEST=$(gh release list --limit 100 --json tagName \
+            --jq '.[].tagName' 2>/dev/null \
+            | grep -E '^v0\.[0-9]+$' \
+            | grep -oE '[0-9]+$' \
+            | sort -n \
+            | tail -1)
+
+          if [ -z "$HIGHEST" ]; then
+            NEXT_TAG="v0.1"
+          else
+            NEXT_TAG="v0.$((HIGHEST + 1))"
+          fi
+
+          echo "tag=$NEXT_TAG" >> "$GITHUB_OUTPUT"
+          echo "Next release tag: $NEXT_TAG"
+
+      - name: Write release notes
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          cat > /tmp/release_notes.md << NOTES
+          **Automated build** from \`${GITHUB_REF_NAME}\` @ \`${SHORT_SHA}\`
+
+          ### Install
+          1. Download **cpuY.zip** and unzip it
+          2. Move **cpuY.app** to \`/Applications\`
+          3. First launch: right-click → **Open** (bypasses Gatekeeper — app is ad-hoc signed, not notarized)
+
+          Alternatively remove the quarantine flag:
+          \`\`\`
+          xattr -dr com.apple.quarantine /Applications/cpuY.app
+          \`\`\`
+
+          ### Requirements
+          macOS 12 Monterey or later (Liquid Glass on macOS 26 Tahoe)
+          NOTES
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NEXT_TAG="${{ steps.version.outputs.tag }}"
+          gh release create "$NEXT_TAG" \
+            /tmp/cpuY.zip#cpuY.zip \
+            --title "cpuY $NEXT_TAG" \
+            --notes-file /tmp/release_notes.md
