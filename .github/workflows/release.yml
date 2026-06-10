@@ -61,40 +61,37 @@ jobs:
           echo "Next release tag: $NEXT_TAG"
 
       - name: Create GitHub Release and upload asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEXT_TAG: ${{ steps.version.outputs.tag }}
         run: |
-          NEXT_TAG="${{ steps.version.outputs.tag }}"
           SHORT_SHA="${GITHUB_SHA::7}"
 
-          NOTES="**Automated build** from \`${GITHUB_REF_NAME}\` @ \`${SHORT_SHA}\`
+          printf 'Automated build from %s @ %s\n\n### Install\n1. Download cpuY.zip and unzip it\n2. Move cpuY.app to /Applications\n3. Right-click the app then Open (bypasses Gatekeeper)\n\nOr strip quarantine:\n    xattr -dr com.apple.quarantine /Applications/cpuY.app\n\n### Requirements\nmacOS 12 Monterey or later\n' \
+            "$GITHUB_REF_NAME" "$SHORT_SHA" > /tmp/release_notes.md
 
-### Install
-1. Download **cpuY.zip** and unzip it
-2. Move **cpuY.app** to \`/Applications\`
-3. First launch: right-click → **Open** (bypasses Gatekeeper — app is ad-hoc signed, not notarized)
+          python3 -c '
+import json, os
+with open("/tmp/release_notes.md") as f:
+    body = f.read()
+tag = os.environ["NEXT_TAG"]
+with open("/tmp/release_payload.json", "w") as f:
+    json.dump({"tag_name": tag, "name": "cpuY " + tag, "body": body}, f)
+'
 
-Alternatively remove the quarantine flag:
-\`\`\`
-xattr -dr com.apple.quarantine /Applications/cpuY.app
-\`\`\`
-
-### Requirements
-macOS 12 Monterey or later (Liquid Glass on macOS 26 Tahoe)"
-
-          # Create the release
           RELEASE=$(curl -s -X POST \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Authorization: Bearer $GH_TOKEN" \
             -H "Content-Type: application/json" \
             "https://api.github.com/repos/${{ github.repository }}/releases" \
-            -d "$(python3 -c "import json,sys; print(json.dumps({'tag_name':'$NEXT_TAG','name':'cpuY $NEXT_TAG','body':sys.stdin.read()}))" <<< "$NOTES")")
+            --data-binary @/tmp/release_payload.json)
 
-          echo "$RELEASE" | python3 -c "import sys,json; r=json.load(sys.stdin); print('Release URL:', r.get('html_url','(no url - check response)')); print('Upload URL:', r.get('upload_url','ERROR'))"
+          echo "$RELEASE" | python3 -c "import sys,json; r=json.load(sys.stdin); print('Release:', r.get('html_url','no url'))"
 
           UPLOAD_URL=$(echo "$RELEASE" | python3 -c "import sys,json; print(json.load(sys.stdin)['upload_url'])" | sed 's/{?name,label}//')
 
-          # Upload the zip
           curl -s -X POST \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Authorization: Bearer $GH_TOKEN" \
             -H "Content-Type: application/zip" \
             "${UPLOAD_URL}?name=cpuY.zip&label=cpuY.zip" \
             --data-binary @/tmp/cpuY.zip \
-            | python3 -c "import sys,json; r=json.load(sys.stdin); print('Asset:', r.get('browser_download_url','ERROR'))"
+            | python3 -c "import sys,json; print('Asset:', json.load(sys.stdin).get('browser_download_url','ERROR'))"
