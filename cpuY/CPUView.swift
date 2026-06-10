@@ -81,6 +81,7 @@ struct CPUView: View {
                         }
                     }
                 }
+                PrivilegedInfoCard(tab: .cpu)
             }
             .padding(12)
         }

@@ -62,6 +62,7 @@ struct InfoView: View {
                             .foregroundStyle(.primary)
                     }
                 }
+                PrivilegedInfoCard(tab: .info)
             }
             .padding(12)
         }

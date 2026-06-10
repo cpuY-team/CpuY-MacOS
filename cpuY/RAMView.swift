@@ -79,6 +79,7 @@ struct RAMView: View {
                         }
                     }
                 }
+                PrivilegedInfoCard(tab: .ram)
             }
             .padding(12)
         }

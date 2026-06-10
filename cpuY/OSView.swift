@@ -14,6 +14,7 @@ struct OSView: View {
                 bootSection
                 environmentSection
                 hackintoshSection
+                PrivilegedInfoCard(tab: .os)
             }
             .padding(12)
         }
@@ -242,6 +243,7 @@ struct OSView: View {
             }
         }
     }
+
 
     // MARK: - Helpers
 

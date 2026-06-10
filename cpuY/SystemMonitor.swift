@@ -164,6 +164,37 @@ struct HackintoshData {
     var oclpVersion: String = ""
 }
 
+struct PrivilegedKV: Identifiable {
+    let id = UUID()
+    var key: String
+    var value: String
+}
+
+struct PrivilegedNVRAMEntry: Identifiable {
+    let id = UUID()
+    var key: String
+    var value: String
+    var displayKey: String { key.components(separatedBy: ":").last ?? key }
+    var guid: String {
+        let parts = key.components(separatedBy: ":")
+        return parts.count > 1 ? parts.first ?? "" : ""
+    }
+}
+
+enum PrivilegedTab { case cpu, ram, storage, battery, network, screen, os, info }
+
+struct PrivilegedData {
+    var cpu:     [PrivilegedKV]          = []  // powermetrics cpu_power
+    var ram:     [PrivilegedKV]          = []  // SPMemoryDataType
+    var storage: [PrivilegedKV]          = []  // SPStorageDataType
+    var battery: [PrivilegedKV]          = []  // AppleSmartBattery registry
+    var network: [PrivilegedKV]          = []  // routing table + ARP
+    var screen:  [PrivilegedKV]          = []  // SPDisplaysDataType
+    var smc:     [PrivilegedKV]          = []  // powermetrics smc sensors
+    var nvram:   [PrivilegedNVRAMEntry]  = []  // nvram -p
+    var info:    [PrivilegedKV]          = []  // SPHardwareDataType
+}
+
 // MARK: - System Monitor
 
 final class SystemMonitor: ObservableObject {
@@ -177,9 +208,11 @@ final class SystemMonitor: ObservableObject {
     @Published var sysInfo      = SysInfoData()
     @Published var osInfo       = OSInfoData()
     @Published var hackintosh   = HackintoshData()
-    @Published var publicIP:      String          = "..."
-    @Published var cpuHistory:    [Double]        = []
-    @Published var ramHistory:    [Double]        = []
+    @Published var publicIP:          String          = "..."
+    @Published var cpuHistory:        [Double]        = []
+    @Published var ramHistory:        [Double]        = []
+    @Published var privilegedData:    PrivilegedData? = nil
+    @Published var isGatheringPriv:   Bool            = false
 
     // Manual backing for refreshInterval so we can call restartTimer() in the setter
     private var _refreshInterval: Double = 2.0
@@ -821,6 +854,117 @@ final class SystemMonitor: ObservableObject {
 
     func refreshPublicIP() { publicIP = "..."; fetchPublicIPBackground() }
 
+    // MARK: - Privileged Info
+
+    func gatherPrivilegedInfo(password: String, completion: @escaping (String?) -> Void) {
+        DispatchQueue.main.async { self.isGatheringPriv = true }
+        queue.async { [weak self] in
+            guard let self else { return }
+            let pw = password + "\n"
+
+            let check = self.shellWithInput("sudo -S -v 2>&1", stdin: pw)
+            if check.lowercased().contains("incorrect") || check.lowercased().contains("sorry") {
+                DispatchQueue.main.async { self.isGatheringPriv = false; completion("Incorrect password") }
+                return
+            }
+
+            var data = PrivilegedData()
+
+            // CPU + SMC — one powermetrics call for both samplers
+            let pmOut = self.shellWithInput("sudo -S powermetrics -n 1 -i 500 --samplers cpu_power,smc 2>/dev/null", stdin: pw)
+            for line in pmOut.components(separatedBy: "\n") {
+                let t = line.trimmingCharacters(in: .whitespaces)
+                guard !t.isEmpty, !t.hasPrefix("*"), t.contains(":") else { continue }
+                let parts = t.components(separatedBy: ":")
+                let k = parts[0].trimmingCharacters(in: .whitespaces)
+                let v = parts.dropFirst().joined(separator: ":").trimmingCharacters(in: .whitespaces)
+                guard !k.isEmpty, !v.isEmpty else { continue }
+                let lc = t.lowercased()
+                if lc.contains("temperature") || lc.contains("fan") || lc.contains("rpm") {
+                    data.smc.append(PrivilegedKV(key: k, value: v))
+                } else if lc.contains("power") || lc.contains("freq") || lc.contains("mhz") || lc.contains("ghz") || lc.contains("watt") {
+                    data.cpu.append(PrivilegedKV(key: k, value: v))
+                }
+            }
+
+            // RAM — system_profiler (no sudo needed but gathered in same session)
+            data.ram = self.parseProfiler(self.shell("system_profiler SPMemoryDataType 2>/dev/null"))
+
+            // Storage
+            data.storage = self.parseProfiler(self.shell("system_profiler SPStorageDataType 2>/dev/null"))
+
+            // Battery — AppleSmartBattery IORegistry (needs root for raw props)
+            let batKeys = ["CycleCount","DesignCapacity","MaxCapacity","CurrentCapacity",
+                           "Temperature","Voltage","Amperage","BatterySerialNumber",
+                           "DeviceName","Manufacturer","Chemistry","FullyCharged",
+                           "IsCharging","ExternalConnected","TimeRemaining","AvgTimeToEmpty"]
+            let batOut = self.shellWithInput("sudo -S ioreg -l -n AppleSmartBattery -r 2>/dev/null", stdin: pw)
+            for line in batOut.components(separatedBy: "\n") {
+                let t = line.trimmingCharacters(in: .whitespaces)
+                for key in batKeys where t.contains("\"\(key)\"") {
+                    if let eq = t.firstIndex(of: "=") {
+                        let val = String(t[t.index(after: eq)...]).trimmingCharacters(in: .whitespaces)
+                        data.battery.append(PrivilegedKV(key: key, value: val))
+                    }
+                }
+            }
+
+            // Network — routing table + ARP (no sudo needed)
+            let rtLines = self.shell("netstat -rn 2>/dev/null").components(separatedBy: "\n")
+            var inIPv4 = false
+            for line in rtLines {
+                let t = line.trimmingCharacters(in: .whitespaces)
+                if t.hasPrefix("Internet:") { inIPv4 = true; continue }
+                if t.hasPrefix("Internet6:") { inIPv4 = false; continue }
+                guard inIPv4, !t.isEmpty, !t.hasPrefix("Destination") else { continue }
+                let cols = t.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
+                if cols.count >= 2 { data.network.append(PrivilegedKV(key: cols[0], value: "\(cols[1])  [\(cols.count > 2 ? cols[2] : "")]")) }
+            }
+            for line in self.shell("arp -a 2>/dev/null").components(separatedBy: "\n") {
+                let t = line.trimmingCharacters(in: .whitespaces)
+                guard !t.isEmpty else { continue }
+                // e.g. "hostname (192.168.1.1) at aa:bb:cc on en0"
+                let ip = t.components(separatedBy: "(").dropFirst().first?.components(separatedBy: ")").first ?? t
+                let mac = t.components(separatedBy: " at ").dropFirst().first?.components(separatedBy: " ").first ?? "?"
+                data.network.append(PrivilegedKV(key: ip, value: mac))
+            }
+
+            // Screen
+            data.screen = self.parseProfiler(self.shell("system_profiler SPDisplaysDataType 2>/dev/null"))
+
+            // OS — full NVRAM dump
+            let nvramOut = self.shellWithInput("sudo -S nvram -p 2>/dev/null", stdin: pw)
+            for line in nvramOut.components(separatedBy: "\n") {
+                let parts = line.components(separatedBy: "\t")
+                guard parts.count >= 2 else { continue }
+                let k = parts[0].trimmingCharacters(in: .whitespaces)
+                let v = parts.dropFirst().joined(separator: "\t").trimmingCharacters(in: .whitespaces)
+                guard !k.isEmpty else { continue }
+                data.nvram.append(PrivilegedNVRAMEntry(key: k, value: v))
+            }
+            data.nvram.sort { $0.displayKey.lowercased() < $1.displayKey.lowercased() }
+
+            // Info
+            data.info = self.parseProfiler(self.shell("system_profiler SPHardwareDataType 2>/dev/null"))
+
+            DispatchQueue.main.async { self.privilegedData = data; self.isGatheringPriv = false; completion(nil) }
+        }
+    }
+
+    private func parseProfiler(_ output: String) -> [PrivilegedKV] {
+        var result: [PrivilegedKV] = []
+        for line in output.components(separatedBy: "\n") {
+            let t = line.trimmingCharacters(in: .whitespaces)
+            guard t.contains(":"), !t.hasSuffix(":") else { continue }
+            let parts = t.components(separatedBy: ":")
+            let k = parts[0].trimmingCharacters(in: .whitespaces)
+            let v = parts.dropFirst().joined(separator: ":").trimmingCharacters(in: .whitespaces)
+            guard !k.isEmpty, !v.isEmpty else { continue }
+            result.append(PrivilegedKV(key: k, value: v))
+        }
+        return result
+    }
+
     // MARK: - Utilities
 
     private func sysctlString(_ name: String) -> String {
@@ -852,6 +996,17 @@ final class SystemMonitor: ObservableObject {
         p.arguments = ["-c", cmd]; p.standardOutput = pipe; p.standardError = Pipe()
         try? p.run(); p.waitUntilExit()
         return String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+    }
+    private func shellWithInput(_ cmd: String, stdin stdinStr: String) -> String {
+        let p = Process(); let outPipe = Pipe(); let inPipe = Pipe()
+        p.executableURL = URL(fileURLWithPath: "/bin/bash")
+        p.arguments = ["-c", cmd]
+        p.standardOutput = outPipe; p.standardError = outPipe; p.standardInput = inPipe
+        try? p.run()
+        inPipe.fileHandleForWriting.write(stdinStr.data(using: .utf8) ?? Data())
+        inPipe.fileHandleForWriting.closeFile()
+        p.waitUntilExit()
+        return String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
     }
     private func valueAfterColon(_ s: String) -> String {
         guard let i = s.firstIndex(of: ":") else { return "" }

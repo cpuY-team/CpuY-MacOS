@@ -36,6 +36,7 @@ struct StorageView: View {
                         }
                     }
                 }
+                PrivilegedInfoCard(tab: .storage)
             }
             .padding(12)
         }

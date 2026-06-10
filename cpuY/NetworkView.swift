@@ -52,6 +52,7 @@ struct NetworkView: View {
                         }
                     }
                 }
+                PrivilegedInfoCard(tab: .network)
             }
             .padding(12)
         }

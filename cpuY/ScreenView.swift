@@ -49,6 +49,7 @@ struct ScreenView: View {
                         }
                     }
                 }
+                PrivilegedInfoCard(tab: .screen)
             }
             .padding(12)
         }

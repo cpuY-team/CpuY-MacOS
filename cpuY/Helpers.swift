@@ -243,3 +243,180 @@ struct CardView<Content: View>: View {
             .cardStyle()
     }
 }
+
+// MARK: - Privileged Info Card
+
+struct PrivilegedInfoCard: View {
+    let tab: PrivilegedTab
+    @EnvironmentObject private var monitor: SystemMonitor
+    @State private var showSheet = false
+    @State private var error = ""
+
+    private var hint: String {
+        switch tab {
+        case .cpu:     return "Read CPU power draw and frequency data via powermetrics."
+        case .ram:     return "Read detailed memory slot information."
+        case .storage: return "Read storage type, SMART status, and capacity details."
+        case .battery: return "Read raw battery registry (chemistry, cycle count, serial)."
+        case .network: return "Read routing table and ARP cache."
+        case .screen:  return "Read full display details including EDID data."
+        case .os:      return "Read all NVRAM variables and SMC sensor data."
+        case .info:    return "Read full hardware report."
+        }
+    }
+
+    var body: some View {
+        CardView {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    SectionLabel(text: "Root Info")
+                    Spacer()
+                    if monitor.isGatheringPriv {
+                        HStack(spacing: 6) {
+                            ProgressView().scaleEffect(0.6)
+                            Text("Gathering…").font(.system(size: 11)).foregroundStyle(Color.cpuMuted)
+                        }
+                    } else {
+                        Button(monitor.privilegedData == nil ? "Gather More Info" : "Refresh") {
+                            error = ""; showSheet = true
+                        }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color.cpuAccent)
+                    }
+                }
+
+                if let priv = monitor.privilegedData {
+                    privContent(priv)
+                } else {
+                    Text(hint).font(.system(size: 12)).foregroundStyle(Color.cpuMuted)
+                    if !error.isEmpty {
+                        Text(error).font(.system(size: 11)).foregroundStyle(Color.cpuDanger)
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showSheet) {
+            PrivilegedPasswordSheet(error: $error) { pw in
+                monitor.gatherPrivilegedInfo(password: pw) { err in
+                    if let err { error = err; showSheet = true }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func privContent(_ priv: PrivilegedData) -> some View {
+        switch tab {
+        case .cpu:
+            kvSection("CPU Power & Frequency", priv.cpu)
+        case .ram:
+            kvSection("Memory Details", priv.ram)
+        case .storage:
+            kvSection("Storage Details", priv.storage)
+        case .battery:
+            kvSection("Battery Registry", priv.battery)
+        case .network:
+            kvSection("Routing & ARP", priv.network)
+        case .screen:
+            kvSection("Display Details", priv.screen)
+        case .os:
+            if !priv.smc.isEmpty {
+                kvSection("SMC Sensors", priv.smc)
+                Divider().overlay(Color.cpuSep)
+            }
+            nvramSection(priv.nvram)
+        case .info:
+            kvSection("Hardware Report", priv.info)
+        }
+    }
+
+    @ViewBuilder
+    private func kvSection(_ title: String, _ items: [PrivilegedKV]) -> some View {
+        if items.isEmpty {
+            Text("No data returned.").font(.system(size: 12)).foregroundStyle(Color.cpuMuted)
+        } else {
+            SectionLabel(text: title)
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 2) {
+                ForEach(items) { item in KVRow(key: item.key, value: item.value) }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func nvramSection(_ entries: [PrivilegedNVRAMEntry]) -> some View {
+        if entries.isEmpty {
+            Text("No NVRAM data returned.").font(.system(size: 12)).foregroundStyle(Color.cpuMuted)
+        } else {
+            SectionLabel(text: "NVRAM — \(entries.count) variables")
+            VStack(spacing: 0) {
+                ForEach(entries) { entry in
+                    HStack(alignment: .top, spacing: 6) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(entry.displayKey)
+                                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            if !entry.guid.isEmpty {
+                                Text(entry.guid)
+                                    .font(.system(size: 9, design: .monospaced))
+                                    .foregroundStyle(Color.cpuMuted)
+                            }
+                        }
+                        .frame(minWidth: 130, alignment: .leading)
+                        Spacer()
+                        Text(entry.value)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(Color.cpuMuted)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    .padding(.vertical, 3)
+                    if entry.id != entries.last?.id {
+                        Divider().overlay(Color.cpuSep.opacity(0.5))
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct PrivilegedPasswordSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var error: String
+    @State private var password = ""
+    let onSubmit: (String) -> Void
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "lock.shield.fill")
+                .font(.system(size: 40))
+                .foregroundStyle(Color.cpuAccent)
+            Text("Administrator Access")
+                .font(.headline)
+            Text("Your password is used once with sudo to gather privileged hardware data. It is never stored.")
+                .font(.system(size: 12))
+                .foregroundStyle(Color.cpuMuted)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 280)
+            SecureField("Password", text: $password)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 240)
+                .onSubmit { submit() }
+            if !error.isEmpty {
+                Text(error).font(.system(size: 11)).foregroundStyle(Color.cpuDanger)
+            }
+            HStack(spacing: 12) {
+                Button("Cancel") { password = ""; error = ""; dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Gather") { submit() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(password.isEmpty)
+            }
+        }
+        .padding(28)
+        .frame(width: 360)
+    }
+
+    private func submit() {
+        let pw = password; password = ""; error = ""; dismiss(); onSubmit(pw)
+    }
+}

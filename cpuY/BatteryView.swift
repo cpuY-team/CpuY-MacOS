@@ -104,6 +104,7 @@ struct BatteryView: View {
                         }
                     }
                 }
+                PrivilegedInfoCard(tab: .battery)
             }
             .padding(12)
         }
