@@ -19,8 +19,7 @@ jobs:
     # If the build fails with "cannot find 'glassEffect' in scope", your runner
     # needs Xcode 26 installed. Use a self-hosted runner on macOS 26 Tahoe,
     # or wait for GitHub to add macOS 26 hosted runners.
-    runs-on: macos-15
-
+    runs-on: self-hosted
     steps:
       - name: Checkout
         uses: actions/checkout@v4
