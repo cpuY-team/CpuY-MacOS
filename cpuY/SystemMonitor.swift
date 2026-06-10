@@ -790,9 +790,15 @@ final class SystemMonitor: ObservableObject {
 
     private func fetchPublicIPBackground() {
         DispatchQueue.global(qos: .background).async { [weak self] in
-            let ip = (self?.shell("curl -s --max-time 5 https://api.ipify.org 2>/dev/null") ?? "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            DispatchQueue.main.async { self?.publicIP = ip.isEmpty ? "Unavailable" : ip }
+            guard let self else { return }
+            let raw = self.shell("curl -s --max-time 5 'https://api.ipify.org?format=json' 2>/dev/null")
+            var ip = "Unavailable"
+            if let data = raw.data(using: .utf8),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let q = json["ip"] as? String, !q.isEmpty {
+                ip = q
+            }
+            DispatchQueue.main.async { self.publicIP = ip }
         }
     }
 
