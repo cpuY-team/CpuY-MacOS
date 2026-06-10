@@ -1,0 +1,245 @@
+import SwiftUI
+#if canImport(Charts)
+import Charts
+#endif
+
+// MARK: - Theme
+
+extension Color {
+    static let cpuAccent  = Color(red: 0.25, green: 0.60, blue: 1.00)
+    static let cpuGood    = Color(red: 0.20, green: 0.85, blue: 0.45)
+    static let cpuWarn    = Color(red: 1.00, green: 0.75, blue: 0.10)
+    static let cpuDanger  = Color(red: 1.00, green: 0.28, blue: 0.28)
+    static let cpuMuted   = Color(red: 0.55, green: 0.55, blue: 0.65)
+    static let cpuBg      = Color(red: 0.09, green: 0.09, blue: 0.11)
+    static let cpuCard    = Color(red: 0.16, green: 0.16, blue: 0.20)
+    static let cpuSep     = Color(red: 0.25, green: 0.25, blue: 0.32)
+}
+
+func usageColor(_ pct: Double) -> Color {
+    if pct < 50 { return .cpuGood }
+    if pct < 80 { return .cpuWarn }
+    return .cpuDanger
+}
+
+// MARK: - Formatters
+
+func fmtBytes(_ bytes: UInt64) -> String {
+    let units = ["B", "KB", "MB", "GB", "TB"]
+    var value = Double(bytes); var i = 0
+    while value >= 1024 && i < 4 { value /= 1024; i += 1 }
+    return String(format: "%.2f %@", value, units[i])
+}
+
+func fmtUptime(_ seconds: Int) -> String {
+    let d = seconds / 86400, h = (seconds % 86400) / 3600
+    let m = (seconds % 3600) / 60, s = seconds % 60
+    return "\(d)d \(h)h \(m)m \(s)s"
+}
+
+// MARK: - View extensions for conditional OS features
+
+extension View {
+    /// Glass card background – Liquid Glass on 26+, material on 12–25, flat on 11.
+    @ViewBuilder
+    func cardStyle() -> some View {
+        if #available(macOS 26, *) {
+            self.glassEffect(in: RoundedRectangle(cornerRadius: 14))
+        } else if #available(macOS 12, *) {
+            self
+                .background(.regularMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+        } else {
+            self
+                .background(Color.cpuCard)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
+    /// Sidebar / panel background.
+    @ViewBuilder
+    func sidebarMaterial() -> some View {
+        if #available(macOS 12, *) {
+            self.background(.ultraThinMaterial)
+        } else {
+            self.background(Color(red: 0.10, green: 0.10, blue: 0.12))
+        }
+    }
+
+    /// Window glass background (macOS 26 only).
+    @ViewBuilder
+    func windowGlass() -> some View {
+        if #available(macOS 26, *) {
+            self.containerBackground(.ultraThinMaterial, for: .window)
+        } else {
+            self
+        }
+    }
+
+    /// Numeric text transition (macOS 14+), no-op otherwise.
+    @ViewBuilder
+    func numericTransition() -> some View {
+        if #available(macOS 14, *) {
+            self.contentTransition(.numericText())
+        } else {
+            self
+        }
+    }
+}
+
+// MARK: - Shared Components
+
+struct SectionLabel: View {
+    let text: String
+    var body: some View {
+        VStack(spacing: 5) {
+            HStack {
+                Text(text)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color.cpuAccent)
+                Spacer()
+            }
+            Divider().overlay(Color.cpuSep)
+        }
+        .padding(.top, 12)
+    }
+}
+
+struct KVRow: View {
+    let key: String
+    let value: String
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(key)
+                .font(.system(size: 12))
+                .foregroundStyle(Color.cpuMuted)
+                .frame(width: 136, alignment: .leading)
+            Text(value)
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(.primary)
+                .textSelection(.enabled)
+                .lineLimit(2)
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 3)
+    }
+}
+
+struct UsageBar: View {
+    let label: String
+    let percent: Double
+    var height: CGFloat = 14
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(label)
+                .font(.system(size: 12))
+                .foregroundStyle(Color.cpuMuted)
+                .frame(width: 80, alignment: .leading)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.white.opacity(0.06))
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(usageColor(percent))
+                        .frame(width: max(2, geo.size.width * CGFloat(max(0, min(percent, 100)) / 100)))
+                        .animation(.linear(duration: 0.3), value: percent)
+                    Text(String(format: "%.1f%%", percent))
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .frame(maxWidth: .infinity, alignment: .center)
+                }
+            }
+            .frame(height: height)
+        }
+    }
+}
+
+// MARK: - Sparkline (tiered by OS)
+
+struct SparklineView: View {
+    let data: [Double]
+    var color: Color = .cpuAccent
+
+    var body: some View {
+        if #available(macOS 13, *) {
+            ChartsSparkline(data: data, color: color)
+        } else {
+            PathSparkline(data: data, color: color)
+        }
+    }
+}
+
+@available(macOS 13, *)
+private struct ChartsSparkline: View {
+    let data: [Double]
+    var color: Color
+
+    private struct Pt: Identifiable { let id: Int; let val: Double }
+
+    var body: some View {
+        let pts = data.enumerated().map { Pt(id: $0.offset, val: $0.element) }
+        Chart(pts) { pt in
+            AreaMark(x: .value("t", pt.id), y: .value("v", pt.val))
+                .foregroundStyle(color.opacity(0.20).gradient)
+            LineMark(x: .value("t", pt.id), y: .value("v", pt.val))
+                .foregroundStyle(color)
+                .lineStyle(StrokeStyle(lineWidth: 1.5))
+        }
+        .chartYScale(domain: 0...100)
+        .chartXAxis(.hidden)
+        .chartYAxis(.hidden)
+        .chartLegend(.hidden)
+        .frame(height: 55)
+        .background(Color.white.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+// Works on macOS 11+
+private struct PathSparkline: View {
+    let data: [Double]
+    var color: Color
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width, h = geo.size.height
+            let count = data.count
+            if count > 1 {
+                let pts: [CGPoint] = data.enumerated().map { i, v in
+                    CGPoint(x: w * CGFloat(i) / CGFloat(count - 1),
+                            y: h - h * CGFloat(max(0, min(v, 100))) / 100)
+                }
+                // Area fill
+                Path { path in
+                    path.move(to: CGPoint(x: pts[0].x, y: h))
+                    path.addLine(to: pts[0])
+                    for pt in pts.dropFirst() { path.addLine(to: pt) }
+                    path.addLine(to: CGPoint(x: pts.last!.x, y: h))
+                    path.closeSubpath()
+                }
+                .fill(color.opacity(0.20))
+                // Line
+                Path { path in
+                    path.move(to: pts[0])
+                    for pt in pts.dropFirst() { path.addLine(to: pt) }
+                }
+                .stroke(color, lineWidth: 1.5)
+            }
+        }
+        .frame(height: 55)
+        .background(Color.white.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+// MARK: - Card
+
+struct CardView<Content: View>: View {
+    @ViewBuilder let content: Content
+    var body: some View {
+        content
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .cardStyle()
+    }
+}
