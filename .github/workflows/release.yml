@@ -70,14 +70,7 @@ jobs:
           printf 'Automated build from %s @ %s\n\n### Install\n1. Download cpuY.zip and unzip it\n2. Move cpuY.app to /Applications\n3. Right-click the app then Open (bypasses Gatekeeper)\n\nOr strip quarantine:\n    xattr -dr com.apple.quarantine /Applications/cpuY.app\n\n### Requirements\nmacOS 12 Monterey or later\n' \
             "$GITHUB_REF_NAME" "$SHORT_SHA" > /tmp/release_notes.md
 
-          python3 -c '
-import json, os
-with open("/tmp/release_notes.md") as f:
-    body = f.read()
-tag = os.environ["NEXT_TAG"]
-with open("/tmp/release_payload.json", "w") as f:
-    json.dump({"tag_name": tag, "name": "cpuY " + tag, "body": body}, f)
-'
+          python3 -c "import json,os; body=open('/tmp/release_notes.md').read(); tag=os.environ['NEXT_TAG']; open('/tmp/release_payload.json','w').write(json.dumps({'tag_name':tag,'name':'cpuY '+tag,'body':body}))"
 
           RELEASE=$(curl -s -X POST \
             -H "Authorization: Bearer $GH_TOKEN" \
