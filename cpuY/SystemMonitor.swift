@@ -160,6 +160,8 @@ struct HackintoshData {
     var verdict: String = "Checking…"
     var indicators: [HackintoshIndicator] = []
     var loadedHCKexts: [String] = []
+    var isOCLP: Bool = false
+    var oclpVersion: String = ""
 }
 
 // MARK: - System Monitor
@@ -705,6 +707,13 @@ final class SystemMonitor: ObservableObject {
             data.bootloaderName = "OpenCore"; data.bootloaderVersion = ocVersion
             ind("OpenCore", ocVersion, true, 90)
         }
+        // OCLP stores its version under the same NVRAM GUID as OpenCore
+        let oclpVer = nvramValue("4D1FDA02-38C7-4A6A-9CC6-4BCCA8B30102:OCLP-Version")
+        if !oclpVer.isEmpty {
+            data.isOCLP = true
+            data.oclpVersion = oclpVer
+            ind("OCLP", "OpenCore Legacy Patcher \(oclpVer)", true, 15)
+        }
         let cloverCheck = nvramValue("7C436110-AB2A-4BBB-A880-FE41995C9F82:Clover.Version")
         if !cloverCheck.isEmpty { data.bootloaderName = "Clover"; ind("Clover", cloverCheck, true, 85) }
         let kextOut = shell("kextstat 2>/dev/null | grep -iE 'VirtualSMC|FakeSMC|Lilu|AppleALC|WhateverGreen|IntelMausi|RealtekRTL8111|AirportItlwm|BrcmPatchRAM|NVMeFix|RestrictEvents' | awk '{print $6}'")
@@ -722,7 +731,9 @@ final class SystemMonitor: ObservableObject {
         if !bootArgs.isEmpty {
             let suspArgs = ["alcid=","agdpmod=","shikigva=","-wegnoegpu","nv_disable=","igfxonln=",
                             "-igfxnohdmi","igfxfw=","cpuid_set=","-liludbg","-liluoff","-alcdbg","-wegdbg"]
-            if suspArgs.contains(where: { bootArgs.contains($0) }) { ind("Boot Args", bootArgs, true, 40) }
+            if bootArgs.contains("amfi_get_out_of_my_way") {
+                ind("Boot Args (AMFI bypass)", bootArgs, true, 20)
+            } else if suspArgs.contains(where: { bootArgs.contains($0) }) { ind("Boot Args", bootArgs, true, 40) }
             else if bootArgs.contains("-v") { ind("Boot Args (verbose)", bootArgs, true, 10) }
             else { ind("Boot Args", bootArgs, false, 0) }
         }
@@ -739,13 +750,19 @@ final class SystemMonitor: ObservableObject {
             if flags != 0 { ind("SIP Config", String(format: "0x%04X (partially disabled)", flags), true, flags > 0x10 ? 20 : 10) }
             else { ind("SIP", "Fully enabled", false, 0) }
         }
+        // OCLP on real Mac: cap at 50.
+        // "Real Mac" = OCLP present + not AMD (Apple never shipped AMD) + not Clover + not ARM
+        let isAMD = (vendor == "AuthenticAMD")
+        let isOCLPRealMac = data.isOCLP && !isAMD && cloverCheck.isEmpty && !isARM
+        if isOCLPRealMac { score = min(score, 50) }
         if isARM { score = min(score, 8) }
         data.confidence = min(score, 100)
-        if isARM && score < 10 { data.verdict = "Apple Silicon — Genuine Mac" }
-        else if data.confidence >= 80 { data.verdict = "Hackintosh Detected" }
-        else if data.confidence >= 50 { data.verdict = "Likely Hackintosh" }
-        else if data.confidence >= 20 { data.verdict = "Suspicious" }
-        else { data.verdict = "Genuine Mac" }
+        if isARM && data.confidence <= 8 { data.verdict = "Apple Silicon — Genuine Mac" }
+        else if isOCLPRealMac           { data.verdict = "OCLP — Real Mac" }
+        else if data.confidence >= 80   { data.verdict = "Hackintosh Detected" }
+        else if data.confidence >= 50   { data.verdict = "Likely Hackintosh" }
+        else if data.confidence >= 20   { data.verdict = "Suspicious" }
+        else                            { data.verdict = "Genuine Mac" }
         data.indicators = indicators
         return data
     }

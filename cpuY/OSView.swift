@@ -161,9 +161,14 @@ struct OSView: View {
                             Text("Bootloader:")
                                 .font(.system(size: 12))
                                 .foregroundStyle(Color.cpuMuted)
-                            Text(hk.bootloaderName + (hk.bootloaderVersion.isEmpty ? "" : " \(hk.bootloaderVersion)"))
+                            let blLabel = hk.isOCLP
+                                ? "OpenCore (OCLP \(hk.oclpVersion))"
+                                : hk.bootloaderName + (hk.bootloaderVersion.isEmpty ? "" : " \(hk.bootloaderVersion)")
+                            Text(blLabel)
                                 .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                                .foregroundStyle(Color.cpuDanger)
+                                .foregroundStyle(hk.isOCLP && hk.confidence <= 50
+                                    ? Color(red: 0.6, green: 0.4, blue: 1.0)
+                                    : Color.cpuDanger)
                         }
                     }
 
@@ -242,15 +247,17 @@ struct OSView: View {
 
     private var verdictBadge: some View {
         let color = verdictColor
+        let useDark = hk.confidence < 20
         return Text(hk.verdict)
             .font(.system(size: 11, weight: .bold))
-            .foregroundStyle(hk.confidence < 20 ? .black : .white)
+            .foregroundStyle(useDark ? Color.black : Color.white)
             .padding(.horizontal, 9).padding(.vertical, 3)
             .background(color)
             .clipShape(Capsule())
     }
 
     private var verdictColor: Color {
+        if hk.isOCLP && hk.confidence <= 50 { return Color(red: 0.6, green: 0.4, blue: 1.0) }
         switch hk.confidence {
         case 0..<20: return .cpuGood
         case 20..<50: return .cpuWarn
