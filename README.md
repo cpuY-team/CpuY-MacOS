@@ -1,4 +1,5 @@
-## Project is on hold for now till i want to use macOS again. Apple has disappointed me in the last few days such as the "Armification" of Xcode 27 which prevents me from integrating the newest macOS/iOS 27 features and also the removal of Intel based Macs support which also prevents me from updating my hackintosh to 27 to test the new features and debug the app for 27. mxtpasontop. (Owner of cpuY-macOS)
+## Project is on hold for now till i want to use macOS again. Apple has disappointed me in the last few days such as the "Armification" of Xcode 27 which prevents me from integrating the newest macOS/iOS 27 features and also the removal of Intel based Macs support which also prevents me from updating my hackintosh to 27 to test the new features and debug the app for 27. The hold is not preventing you from opening PR's or Issues to report bugs or add new features but dont expect them to be taken care of for months. mxt2888 (owner of cpuY-MacOS)
+
 
 # cpuY — macOS System Monitor
 
