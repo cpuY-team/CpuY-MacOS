@@ -1,3 +1,5 @@
+## Project is on hold for now till i want to use macOS again. Apple has disappointed me in the last few days such as the "Armification" of Xcode 27 which prevents me from integrating the newest macOS/iOS 27 features and also the removal of Intel based Macs support which also prevents me from updating my hackintosh to 27 to test the new features and debug the app for 27. mxtpasontop. (Owner of cpuY-macOS)
+
 # cpuY — macOS System Monitor
 
 A native SwiftUI system monitor for macOS, ported and expanded from the original [iOS SwiftUI app](https://github.com/nat649/cpuY-iOS). Displays real-time CPU, RAM, storage, battery, network, display, and OS information — with full **Liquid Glass** support on macOS 26 Tahoe and graceful fallbacks down to macOS 12 Monterey.
