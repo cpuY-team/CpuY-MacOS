@@ -1,8 +1,4 @@
-## Project is on hold for now till i want to use macOS again. Apple has disappointed me in the last few days such as the "Armification" of Xcode 27 which prevents me from integrating the newest macOS/iOS 27 features and also the removal of Intel based Macs support which also prevents me from updating my hackintosh to 27 to test the new features and debug the app for 27. The hold is not preventing you from opening PR's or Issues to report bugs or add new features but dont expect them to be taken care of for months. mxt2888 (owner of cpuY-MacOS)
-
-Here is provided proof that Apple has rendered xcode 27 arm only: <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/4d585b92-4982-4cac-907b-b9f979177c57" />
- and also me executing file on the xcode binary: <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/4f13fa01-7946-4e8b-89be-322bb807d2ad" />
-
+## Clearence on mt previous statement. I am going back on macOS, that does not change the fact that i am disappointed in apple at the highest rank i can think of in my brain. I will continue to maintain the app but i may be less active as most of the time will be spent on my trying to fix my EFI for me to have the best development workstation, i have overheating issues, GPU issue (i use a AMD hackintosh wtf am i looking for anyways lmaoo) and overall i have poor system stability. I welcome back macOS on my pc but go fuck yourself tim apple and every person at apple that had on agreement with the armification of macOS and related tools.
 
 # cpuY — macOS System Monitor
 
