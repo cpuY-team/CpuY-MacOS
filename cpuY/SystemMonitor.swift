@@ -526,9 +526,9 @@ final class SystemMonitor: ObservableObject {
                 if let v  = raw["Voltage"]     as? Int { info.voltage    = v  }
                 if let a  = raw["Amperage"]    as? Int { info.amperage   = a  }
                 if let t  = raw["Temperature"] as? Int {
-                    var c = Double(t) / 100.0 - 273.15
-                    if c < -30 || c > 120 { c = Double(t) / 10.0 }
-                    info.temperatureCelsius = c
+                    var c = Double(t) / 100.0 - 273.15          // 0.01K units
+                    if c < -30 || c > 120 { c = Double(t) / 10.0 - 273.15 }  // 0.1K units
+                    if c >= -30 && c <= 120 { info.temperatureCelsius = c }
                 }
                 if info.currentCapacityMAh < 0, let curr  = raw["CurrentCapacity"] as? Int { info.currentCapacityMAh = curr }
                 if info.maxCapacityMAh    < 0, let maxCap = raw["MaxCapacity"]     as? Int { info.maxCapacityMAh     = maxCap }
