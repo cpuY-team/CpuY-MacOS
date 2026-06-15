@@ -150,6 +150,7 @@ struct HackintoshIndicator: Identifiable {
     var value: String
     var suspicious: Bool
     var points: Int
+    var isWarning: Bool = false
 }
 
 struct HackintoshData {
@@ -728,6 +729,9 @@ final class SystemMonitor: ObservableObject {
             indicators.append(HackintoshIndicator(name: name, value: value, suspicious: suspicious, points: pts))
             if suspicious { score += pts }
         }
+        func warnInd(_ name: String, _ value: String) {
+            indicators.append(HackintoshIndicator(name: name, value: value, suspicious: false, points: 0, isWarning: true))
+        }
         var arm64: Int32 = 0; var sz = MemoryLayout<Int32>.size
         sysctlbyname("hw.optional.arm64", &arm64, &sz, nil, 0)
         let isARM = arm64 != 0
@@ -760,7 +764,7 @@ final class SystemMonitor: ObservableObject {
                 data.oclpVersion = oclpVer
                 ind("OCLP", "OpenCore Legacy Patcher \(oclpVer)", true, 15)
             } else {
-                ind("OCLP-Version (stale NVRAM?)", "Key present but no corroborating indicators found", false, 0)
+                warnInd("Previously OCLPed", "OCLP-Version found in NVRAM but Mac is not currently running OCLP — likely a leftover from a prior install")
             }
         }
         let kextScores: [(String, Int)] = [

@@ -211,8 +211,14 @@ struct OSView: View {
                     VStack(spacing: 0) {
                         ForEach(hk.indicators) { ind in
                             HStack(alignment: .top, spacing: 6) {
-                                Image(systemName: ind.suspicious ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                                    .foregroundStyle(ind.suspicious ? Color.cpuWarn : Color.cpuGood)
+                                let iconName = ind.suspicious ? "exclamationmark.triangle.fill"
+                                             : ind.isWarning  ? "exclamationmark.circle.fill"
+                                             : "checkmark.circle.fill"
+                                let iconColor: Color = ind.suspicious ? .cpuWarn
+                                             : ind.isWarning  ? .orange
+                                             : .cpuGood
+                                Image(systemName: iconName)
+                                    .foregroundStyle(iconColor)
                                     .font(.system(size: 11))
                                     .padding(.top, 1)
                                 VStack(alignment: .leading, spacing: 0) {
@@ -229,7 +235,7 @@ struct OSView: View {
                                     }
                                     Text(ind.value)
                                         .font(.system(size: 11))
-                                        .foregroundStyle(Color.cpuMuted)
+                                        .foregroundStyle(ind.isWarning ? .orange.opacity(0.8) : Color.cpuMuted)
                                         .lineLimit(2)
                                 }
                             }
