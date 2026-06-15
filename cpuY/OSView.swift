@@ -18,7 +18,6 @@ struct OSView: View {
             }
             .padding(12)
         }
-        .background(Color.cpuBg)
     }
 
     // MARK: - Software

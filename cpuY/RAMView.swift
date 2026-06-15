@@ -9,24 +9,42 @@ struct RAMView: View {
             VStack(alignment: .leading, spacing: 8) {
 
                 CardView {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text(String(format: "%.1f%%", ram.usagePercent))
-                                .font(.system(size: 36, weight: .bold, design: .rounded))
-                                .foregroundStyle(usageColor(ram.usagePercent))
-                            Text("\(fmtBytes(ram.usedBytes)) / \(fmtBytes(ram.totalBytes))")
-                                .font(.system(size: 13))
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 8) {
+                            Text("\(fmtBytes(ram.usedBytes)) of \(fmtBytes(ram.totalBytes))")
+                                .font(.system(size: 11))
                                 .foregroundStyle(Color.cpuMuted)
+                            Spacer()
                             if ram.isUnifiedMemory {
                                 Text("Unified")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(.black)
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(Color.cpuAccent)
                                     .padding(.horizontal, 7).padding(.vertical, 2)
-                                    .background(Color.cpuAccent)
+                                    .background(Color.cpuAccent.opacity(0.15))
                                     .clipShape(Capsule())
                             }
                         }
-                        UsageBar(label: "RAM", percent: ram.usagePercent, height: 16)
+                        HStack(alignment: .firstTextBaseline, spacing: 4) {
+                            Text(String(format: "%.1f", ram.usagePercent))
+                                .font(.system(size: 52, weight: .bold, design: .rounded))
+                                .foregroundStyle(usageColor(ram.usagePercent))
+                                .numericTransition()
+                                .animation(.linear(duration: 0.3), value: ram.usagePercent)
+                            Text("%")
+                                .font(.system(size: 28, weight: .semibold, design: .rounded))
+                                .foregroundStyle(usageColor(ram.usagePercent).opacity(0.7))
+                                .padding(.bottom, 6)
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text(fmtBytes(ram.availableBytes))
+                                    .font(.system(size: 18, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(.primary)
+                                Text("free")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(Color.cpuMuted)
+                            }
+                        }
+                        UsageBar(percent: ram.usagePercent, height: 6)
                         SparklineView(data: monitor.ramHistory)
                     }
                 }
@@ -83,7 +101,6 @@ struct RAMView: View {
             }
             .padding(12)
         }
-        .background(Color.cpuBg)
     }
 }
 

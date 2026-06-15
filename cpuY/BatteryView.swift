@@ -27,24 +27,28 @@ struct BatteryView: View {
                 } else {
                     // Charge card
                     CardView {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                                Text(String(format: "%.0f%%", max(0, bat.chargePercent)))
-                                    .font(.system(size: 42, weight: .bold, design: .rounded))
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(alignment: .center) {
+                                Image(systemName: batteryIcon)
+                                    .font(.system(size: 28))
                                     .foregroundStyle(batteryChargeColor)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    statusBadge
-                                    if !timeString.isEmpty {
-                                        Text(timeString)
-                                            .font(.system(size: 11))
-                                            .foregroundStyle(Color.cpuMuted)
-                                    }
-                                }
+                                Spacer()
+                                statusBadge
+                            }
+                            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                                Text(String(format: "%.0f", max(0, bat.chargePercent)))
+                                    .font(.system(size: 52, weight: .bold, design: .rounded))
+                                    .foregroundStyle(batteryChargeColor)
+                                    .numericTransition()
+                                Text("%")
+                                    .font(.system(size: 28, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(batteryChargeColor.opacity(0.7))
+                                    .padding(.bottom, 6)
                                 Spacer()
                                 if bat.amperage != 0 {
                                     VStack(alignment: .trailing, spacing: 2) {
                                         Text(String(format: "%+d mA", bat.amperage))
-                                            .font(.system(size: 12, design: .monospaced))
+                                            .font(.system(size: 16, weight: .semibold, design: .monospaced))
                                             .foregroundStyle(bat.amperage > 0 ? Color.cpuGood : Color.cpuWarn)
                                         if bat.voltage > 0 {
                                             Text(String(format: "%.2f V", Double(bat.voltage) / 1000.0))
@@ -54,7 +58,12 @@ struct BatteryView: View {
                                     }
                                 }
                             }
-                            UsageBar(label: "Charge", percent: max(0, bat.chargePercent), height: 18)
+                            UsageBar(percent: max(0, bat.chargePercent), height: 6)
+                            if !timeString.isEmpty {
+                                Text(timeString)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(Color.cpuMuted)
+                            }
                         }
                     }
 
@@ -108,7 +117,16 @@ struct BatteryView: View {
             }
             .padding(12)
         }
-        .background(Color.cpuBg)
+    }
+
+    private var batteryIcon: String {
+        if bat.isCharging { return "battery.100.bolt" }
+        let pct = bat.chargePercent
+        if pct > 75 { return "battery.100" }
+        if pct > 50 { return "battery.75" }
+        if pct > 25 { return "battery.50" }
+        if pct > 10 { return "battery.25" }
+        return "battery.0"
     }
 
     private var statusText: String {

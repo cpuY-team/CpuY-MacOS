@@ -66,6 +66,5 @@ struct InfoView: View {
             }
             .padding(12)
         }
-        .background(Color.cpuBg)
     }
 }

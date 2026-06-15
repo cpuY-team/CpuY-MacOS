@@ -12,23 +12,42 @@ struct CPUView: View {
             VStack(alignment: .leading, spacing: 8) {
 
                 CardView {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text(String(format: "%.1f%%", cpu.usagePercent))
-                                .font(.system(size: 36, weight: .bold, design: .rounded))
-                                .foregroundStyle(usageColor(cpu.usagePercent))
-                            if cpu.baseMHz > 0 {
-                                Text(String(format: "@ %.0f MHz", cpu.baseMHz))
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(Color.cpuMuted)
-                            }
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 8) {
+                            Text(cpu.modelName)
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color.cpuMuted)
+                                .lineLimit(1)
+                            Spacer()
                             if cpu.isAppleSilicon {
                                 Text("Apple Silicon")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(.black)
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(Color.cpuAccent)
                                     .padding(.horizontal, 7).padding(.vertical, 2)
-                                    .background(Color.cpuAccent)
+                                    .background(Color.cpuAccent.opacity(0.15))
                                     .clipShape(Capsule())
+                            }
+                        }
+                        HStack(alignment: .firstTextBaseline, spacing: 4) {
+                            Text(String(format: "%.1f", cpu.usagePercent))
+                                .font(.system(size: 52, weight: .bold, design: .rounded))
+                                .foregroundStyle(usageColor(cpu.usagePercent))
+                                .numericTransition()
+                                .animation(.linear(duration: 0.3), value: cpu.usagePercent)
+                            Text("%")
+                                .font(.system(size: 28, weight: .semibold, design: .rounded))
+                                .foregroundStyle(usageColor(cpu.usagePercent).opacity(0.7))
+                                .padding(.bottom, 6)
+                            Spacer()
+                            if cpu.baseMHz > 0 {
+                                VStack(alignment: .trailing, spacing: 2) {
+                                    Text(String(format: "%.0f", cpu.baseMHz))
+                                        .font(.system(size: 22, weight: .semibold, design: .monospaced))
+                                        .foregroundStyle(.primary)
+                                    Text("MHz")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(Color.cpuMuted)
+                                }
                             }
                         }
                         SparklineView(data: monitor.cpuHistory)
@@ -85,7 +104,6 @@ struct CPUView: View {
             }
             .padding(12)
         }
-        .background(Color.cpuBg)
     }
 }
 

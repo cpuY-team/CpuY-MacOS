@@ -72,6 +72,5 @@ struct AboutView: View {
             }
             .padding(12)
         }
-        .background(Color.cpuBg)
     }
 }

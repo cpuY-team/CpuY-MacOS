@@ -10,10 +10,10 @@ extension Color {
     static let cpuGood    = Color(red: 0.20, green: 0.85, blue: 0.45)
     static let cpuWarn    = Color(red: 1.00, green: 0.75, blue: 0.10)
     static let cpuDanger  = Color(red: 1.00, green: 0.28, blue: 0.28)
-    static let cpuMuted   = Color(red: 0.55, green: 0.55, blue: 0.65)
-    static let cpuBg      = Color(red: 0.09, green: 0.09, blue: 0.11)
-    static let cpuCard    = Color(red: 0.16, green: 0.16, blue: 0.20)
-    static let cpuSep     = Color(red: 0.25, green: 0.25, blue: 0.32)
+    static let cpuMuted   = Color(nsColor: .secondaryLabelColor)
+    static let cpuBg      = Color(nsColor: .windowBackgroundColor)
+    static let cpuCard    = Color(nsColor: .controlBackgroundColor)
+    static let cpuSep     = Color(nsColor: .separatorColor)
 }
 
 func usageColor(_ pct: Double) -> Color {
@@ -92,16 +92,12 @@ extension View {
 struct SectionLabel: View {
     let text: String
     var body: some View {
-        VStack(spacing: 5) {
-            HStack {
-                Text(text)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.cpuAccent)
-                Spacer()
-            }
-            Divider().overlay(Color.cpuSep)
-        }
-        .padding(.top, 12)
+        Text(text.uppercased())
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(Color.cpuMuted)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
     }
 }
 
@@ -109,36 +105,39 @@ struct KVRow: View {
     let key: String
     let value: String
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(key)
                 .font(.system(size: 12))
                 .foregroundStyle(Color.cpuMuted)
-                .frame(width: 136, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 6)
             Text(value)
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(.primary)
                 .textSelection(.enabled)
                 .lineLimit(2)
-            Spacer(minLength: 0)
+                .multilineTextAlignment(.trailing)
         }
         .padding(.vertical, 3)
     }
 }
 
 struct UsageBar: View {
-    let label: String
+    var label: String = ""
     let percent: Double
     var height: CGFloat = 14
     var body: some View {
         HStack(spacing: 10) {
-            Text(label)
-                .font(.system(size: 12))
-                .foregroundStyle(Color.cpuMuted)
-                .frame(width: 80, alignment: .leading)
+            if !label.isEmpty {
+                Text(label)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.cpuMuted)
+                    .frame(width: 80, alignment: .leading)
+            }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.white.opacity(0.06))
+                        .fill(Color.primary.opacity(0.08))
                     RoundedRectangle(cornerRadius: 4)
                         .fill(usageColor(percent))
                         .frame(width: max(2, geo.size.width * CGFloat(max(0, min(percent, 100)) / 100)))
@@ -190,7 +189,7 @@ private struct ChartsSparkline: View {
         .chartYAxis(.hidden)
         .chartLegend(.hidden)
         .frame(height: 55)
-        .background(Color.white.opacity(0.04))
+        .background(Color.primary.opacity(0.05))
         .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 }
@@ -227,7 +226,7 @@ private struct PathSparkline: View {
             }
         }
         .frame(height: 55)
-        .background(Color.white.opacity(0.04))
+        .background(Color.primary.opacity(0.05))
         .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 }
