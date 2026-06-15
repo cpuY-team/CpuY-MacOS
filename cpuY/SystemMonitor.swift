@@ -739,33 +739,34 @@ final class SystemMonitor: ObservableObject {
         let vendor = sysctlString("machdep.cpu.vendor")
         if vendor == "AuthenticAMD" { ind("CPU Vendor", "AuthenticAMD — Apple has never shipped AMD CPUs", true, 90) }
         else if !vendor.isEmpty { ind("CPU Vendor", vendor, false, 0) }
+        // Scoring/indicating for ocVersion is handled below alongside OCLP to avoid
+        // stale OCLP NVRAM keys contributing 90pts to the hackintosh score independently.
         let ocVersion = nvramValue("4D1FDA02-38C7-4A6A-9CC6-4BCCA8B30102:opencore-version")
-        if !ocVersion.isEmpty {
-            data.bootloaderName = "OpenCore"; data.bootloaderVersion = ocVersion
-            ind("OpenCore", ocVersion, true, 90)
-        }
         let cloverCheck = nvramValue("7C436110-AB2A-4BBB-A880-FE41995C9F82:Clover.Version")
         if !cloverCheck.isEmpty { data.bootloaderName = "Clover"; ind("Clover", cloverCheck, true, 85) }
         let kextOut = shell("kextstat 2>/dev/null | grep -iE 'VirtualSMC|FakeSMC|Lilu|AppleALC|WhateverGreen|IntelMausi|RealtekRTL8111|AirportItlwm|itlwm|BrcmPatchRAM|NVMeFix|RestrictEvents' | awk '{print $6}'")
         let kextList = kextOut.components(separatedBy: "\n").filter { !$0.isEmpty }
         data.loadedHCKexts = kextList
-        // OCLP detection — require corroboration to avoid false positives from stale NVRAM keys.
-        // A genuine OCLP install always boots via OpenCore AND writes OCLP-Model/OCLP-Stage alongside
-        // OCLP-Version. A single stale key left over from a prior install should not trigger this.
+        // OC + OCLP joint detection. NVRAM keys (opencore-version, OCLP-Version, OCLP-Model, etc.)
+        // all survive OS reinstalls and can be stale together — so NVRAM alone is not enough.
+        // We require at least one runtime signal (loaded kext or app on disk) to confirm OCLP is
+        // currently installed. Without that, all OC/OCLP NVRAM keys are treated as prior-install
+        // leftovers and scored as zero so they don't pollute the hackintosh confidence score.
         let oclpVer = nvramValue("4D1FDA02-38C7-4A6A-9CC6-4BCCA8B30102:OCLP-Version")
+        let hasRestrictEvents = kextList.contains(where: { $0.contains("RestrictEvents") })
+        let oclpActiveSignal = hasRestrictEvents
         if !oclpVer.isEmpty {
-            let oclpModel = nvramValue("4D1FDA02-38C7-4A6A-9CC6-4BCCA8B30102:OCLP-Model")
-            let oclpStage = nvramValue("4D1FDA02-38C7-4A6A-9CC6-4BCCA8B30102:OCLP-Stage")
-            let hasRestrictEvents = kextList.contains(where: { $0.contains("RestrictEvents") })
-            let bootedViaOC = !ocVersion.isEmpty
-            let corroborated = bootedViaOC || !oclpModel.isEmpty || !oclpStage.isEmpty || hasRestrictEvents
-            if corroborated {
-                data.isOCLP = true
-                data.oclpVersion = oclpVer
+            if oclpActiveSignal {
+                if !ocVersion.isEmpty { data.bootloaderName = "OpenCore"; data.bootloaderVersion = ocVersion }
+                data.isOCLP = true; data.oclpVersion = oclpVer
                 ind("OCLP", "OpenCore Legacy Patcher \(oclpVer)", true, 15)
             } else {
-                warnInd("Previously OCLPed", "OCLP-Version found in NVRAM but Mac is not currently running OCLP — likely a leftover from a prior install")
+                warnInd("Previously OCLPed", "OCLP-Version found in NVRAM but no active installation detected — likely leftover from a prior install")
             }
+        } else if !ocVersion.isEmpty {
+            // Vanilla OpenCore (no OCLP keys present)
+            data.bootloaderName = "OpenCore"; data.bootloaderVersion = ocVersion
+            ind("OpenCore", ocVersion, true, 90)
         }
         let kextScores: [(String, Int)] = [
             ("VirtualSMC", 75), ("FakeSMC", 80), ("Lilu", 60), ("AppleALC", 45),
