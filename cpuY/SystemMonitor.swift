@@ -740,22 +740,33 @@ final class SystemMonitor: ObservableObject {
             data.bootloaderName = "OpenCore"; data.bootloaderVersion = ocVersion
             ind("OpenCore", ocVersion, true, 90)
         }
-        // OCLP stores its version under the same NVRAM GUID as OpenCore
-        let oclpVer = nvramValue("4D1FDA02-38C7-4A6A-9CC6-4BCCA8B30102:OCLP-Version")
-        if !oclpVer.isEmpty {
-            data.isOCLP = true
-            data.oclpVersion = oclpVer
-            ind("OCLP", "OpenCore Legacy Patcher \(oclpVer)", true, 15)
-        }
         let cloverCheck = nvramValue("7C436110-AB2A-4BBB-A880-FE41995C9F82:Clover.Version")
         if !cloverCheck.isEmpty { data.bootloaderName = "Clover"; ind("Clover", cloverCheck, true, 85) }
-        let kextOut = shell("kextstat 2>/dev/null | grep -iE 'VirtualSMC|FakeSMC|Lilu|AppleALC|WhateverGreen|IntelMausi|RealtekRTL8111|AirportItlwm|BrcmPatchRAM|NVMeFix|RestrictEvents' | awk '{print $6}'")
+        let kextOut = shell("kextstat 2>/dev/null | grep -iE 'VirtualSMC|FakeSMC|Lilu|AppleALC|WhateverGreen|IntelMausi|RealtekRTL8111|AirportItlwm|itlwm|BrcmPatchRAM|NVMeFix|RestrictEvents' | awk '{print $6}'")
         let kextList = kextOut.components(separatedBy: "\n").filter { !$0.isEmpty }
         data.loadedHCKexts = kextList
+        // OCLP detection — require corroboration to avoid false positives from stale NVRAM keys.
+        // A genuine OCLP install always boots via OpenCore AND writes OCLP-Model/OCLP-Stage alongside
+        // OCLP-Version. A single stale key left over from a prior install should not trigger this.
+        let oclpVer = nvramValue("4D1FDA02-38C7-4A6A-9CC6-4BCCA8B30102:OCLP-Version")
+        if !oclpVer.isEmpty {
+            let oclpModel = nvramValue("4D1FDA02-38C7-4A6A-9CC6-4BCCA8B30102:OCLP-Model")
+            let oclpStage = nvramValue("4D1FDA02-38C7-4A6A-9CC6-4BCCA8B30102:OCLP-Stage")
+            let hasRestrictEvents = kextList.contains(where: { $0.contains("RestrictEvents") })
+            let bootedViaOC = !ocVersion.isEmpty
+            let corroborated = bootedViaOC || !oclpModel.isEmpty || !oclpStage.isEmpty || hasRestrictEvents
+            if corroborated {
+                data.isOCLP = true
+                data.oclpVersion = oclpVer
+                ind("OCLP", "OpenCore Legacy Patcher \(oclpVer)", true, 15)
+            } else {
+                ind("OCLP-Version (stale NVRAM?)", "Key present but no corroborating indicators found", false, 0)
+            }
+        }
         let kextScores: [(String, Int)] = [
             ("VirtualSMC", 75), ("FakeSMC", 80), ("Lilu", 60), ("AppleALC", 45),
             ("WhateverGreen", 45), ("IntelMausi", 40), ("RealtekRTL8111", 35),
-            ("AirportItlwm", 40), ("BrcmPatchRAM", 35), ("NVMeFix", 30), ("RestrictEvents", 25)
+            ("AirportItlwm", 40), ("itlwm", 40), ("BrcmPatchRAM", 35), ("NVMeFix", 30), ("RestrictEvents", 25)
         ]
         for kext in kextList {
             for (name, pts) in kextScores where kext.contains(name) { ind("Kext: \(name)", "Loaded", true, pts); break }
@@ -792,6 +803,7 @@ final class SystemMonitor: ObservableObject {
         data.confidence = min(score, 100)
         if isARM && data.confidence <= 8 { data.verdict = "Apple Silicon — Genuine Mac" }
         else if isOCLPRealMac           { data.verdict = "OCLP — Real Mac" }
+        else if isAMD && data.confidence >= 80 { data.verdict = "Ryzentosh Detected" }
         else if data.confidence >= 80   { data.verdict = "Hackintosh Detected" }
         else if data.confidence >= 50   { data.verdict = "Likely Hackintosh" }
         else if data.confidence >= 20   { data.verdict = "Suspicious" }
